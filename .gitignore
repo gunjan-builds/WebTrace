@@ -1,5 +1,5 @@
 
-# Python
+# Python cache files
 __pycache__/
 *.py[cod]
 *.pyd
@@ -8,9 +8,10 @@ __pycache__/
 .venv/
 venv/
 
-# Environment variables and secrets
+# Environment variables and API keys
 .env
 .env.*
+!.env.example
 
 # Keep an example environment file if needed
 !.env.example
