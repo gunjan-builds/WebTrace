@@ -1,4 +1,4 @@
-# the-logical-crew-ai-qa
+# WebTrace
 The Autonomous AI QA Engineer - Team The Logical Crew
 
 Autonomous AI QA Engineer, is an AI agent that automatically tests websites like a human tester, without requiring us to write every test script manually.
