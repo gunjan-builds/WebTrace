@@ -4,6 +4,8 @@ from fastapi import FastAPI, HTTPException
 from .schemas import TestRequest, TestCreated
 from .orchestrator import create_test_run
 
+from .url_validator import validate_url
+
 app = FastAPI(title="WebTrace API")
 
 # Temporary in-memory storage for test runs
@@ -25,8 +27,12 @@ def health_check():
 
 @app.post("/api/tests", response_model=TestCreated)
 def create_test(request: TestRequest):
+    try:
+        validate_url(str(request.url))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    
     result = create_test_run(request)
-
     runs[result["run_id"]] = result
 
     return TestCreated(
