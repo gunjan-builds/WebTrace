@@ -1,0 +1,32 @@
+{
+    "project": "WebTrace AI QA",
+    "timestamp": "2026-10-22 22:48:37",
+    "summary": {
+        "total_tests": 2,
+        "passed": 1,
+        "failed": 1,
+        "pass_rate": 50.0,
+        "total_visual_bugs": 1
+    },
+    "test_results": [
+        {
+            "test_name": "Login Flow Validation",
+            "status": "PASS",
+            "details": "User successfully logged in with valid credentials.",
+            "evidence_path": null
+        },
+        {
+            "test_name": "Dashboard Data Load",
+            "status": "FAIL",
+            "details": "API timeout while fetching user metrics.",
+            "evidence_path": "screenshots/error_load.png"
+        }
+    ],
+    "visual_bugs": [
+        {
+            "component": "Navbar UI",
+            "issue": "Alignment breaks on 1024px screen width",
+            "severity": "High"
+        }
+    ]
+}

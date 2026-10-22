@@ -1,5 +1,7 @@
+import os
 import asyncio
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from backend.agents.tester import BrowserTester
 
@@ -44,3 +46,24 @@ async def run_browser_test(request: TestRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/report/json")
+def get_json_report():
+    # Robust path handling (root ya backend folder dono check karega)
+    report_path = "reports/test_report.json"
+    if not os.path.exists(report_path):
+        report_path = "backend/reports/test_report.json"
+        
+    if os.path.exists(report_path):
+        return FileResponse(report_path, media_type="application/json")
+    return {"error": "Report not found. Please run tests first!"}
+
+@app.get("/api/report/summary")
+def get_markdown_report():
+    summary_path = "reports/SUMMARY.md"
+    if not os.path.exists(summary_path):
+        summary_path = "backend/reports/SUMMARY.md"
+        
+    if os.path.exists(summary_path):
+        return FileResponse(summary_path, media_type="text/markdown")
+    return {"error": "Summary not found."}
