@@ -118,7 +118,7 @@ async def main():
         print("Broken image loaded:", broken_image_loaded)
 
         # Run the Visual Auditor.
-        auditor = VisualAuditor()
+        auditor = VisualAuditor(reload_check=False)
 
         results = await auditor.audit_page(
             page,
