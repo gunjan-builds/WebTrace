@@ -1,10 +1,18 @@
 import React, { useState } from 'react';
 
-export default function Dashboard() {
+export default function Dashboard({ userName = "User" }) {
   const [url, setUrl] = useState('https://ecommerce-demo.webtrace.ai');
   const [objective, setObjective] = useState('Verify full checkout flow with discount coupon applied');
   const [isRunning, setIsRunning] = useState(false);
   const [activeLogFilter, setActiveLogFilter] = useState('all');
+
+  // Dynamic Time-Based Greeting
+  const getGreeting = () => {
+    const hours = new Date().getHours();
+    if (hours >= 5 && hours < 12) return 'Good morning';
+    if (hours >= 12 && hours < 17) return 'Good afternoon';
+    return 'Good evening';
+  };
 
   const handleStartTest = (e) => {
     e.preventDefault();
@@ -84,7 +92,7 @@ export default function Dashboard() {
               <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#46cdb3' }}></span> System Ready
             </span>
             <span style={{ fontSize: '12px', backgroundColor: '#17253d', color: '#cbd5e1', padding: '6px 14px', borderRadius: '20px', border: '1px solid #1e293b' }}>
-              Gauri Deshmukh
+              {userName}
             </span>
           </div>
         </header>
@@ -94,17 +102,17 @@ export default function Dashboard() {
           
           <div style={{ marginBottom: '20px' }}>
             <span style={{ fontSize: '10px', fontWeight: 'bold', letterSpacing: '1px', color: '#3b82f6', textTransform: 'uppercase' }}>Autonomous Testing Suite</span>
-            <h2 style={{ fontSize: '22px', fontWeight: 'bold', color: '#fff', margin: '4px 0 2px 0' }}>Good evening, Gauri 👋</h2>
+            <h2 style={{ fontSize: '22px', fontWeight: 'bold', color: '#fff', margin: '4px 0 2px 0' }}>{getGreeting()}, {userName} 👋</h2>
             <p style={{ fontSize: '12px', color: '#94a3b8', margin: 0 }}>Run end-to-end multi-agent web verification with automatic defect and visual regression logging.</p>
           </div>
 
           {/* Status Strip */}
-          <div style={{ backgroundColor: '#0d1222', border: '1px solid #1a2639', padding: '12px 20px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'between', fontSize: '12px', marginBottom: '24px' }}>
+          <div style={{ backgroundColor: '#0d1222', border: '1px solid #1a2639', padding: '12px 20px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px', marginBottom: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: isRunning ? '#3b82f6' : '#10b981' }}></span>
               <span>Status: <strong style={{ color: '#fff' }}>{isRunning ? 'Execution in Progress...' : 'Idle & Ready'}</strong></span>
             </div>
-            <div style={{ fontSize: '11px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '6px', marginLeft: 'auto' }}>
+            <div style={{ fontSize: '11px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span>🕒 Last Execution: 2 mins ago</span>
             </div>
           </div>
