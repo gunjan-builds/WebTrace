@@ -15,3 +15,31 @@ venv/
 
 # Keep an example environment file if needed
 !.env.example
+# Python virtual environments
+.venv/
+venv/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# Environment variables and secrets
+.env
+.env.*
+
+# Keep an example environment file if needed
+!.env.example
+
+# Test and coverage files
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE and operating system files
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Generated WebTrace artifacts
+backend/screenshots/*
+backend/reports/*
