@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 
 from backend.agents.screenshot_highlighter import highlight_screenshot
-
+from backend.visual_regression import compare_screenshots
 
 # ---------------------------------------------------------------------------
 # Shared JavaScript helpers (injected into every page.evaluate call)
@@ -779,12 +779,13 @@ class VisualAuditor:
     # Main entry point
     # ------------------------------------------------------------------
     async def audit_page(
-        self,
-        page,
-        expected_selectors=None,
-        js_errors=None,
-        check_links=False,
-        page_status=None,
+    self,
+    page,
+    expected_selectors=None,
+    js_errors=None,
+    check_links=False,
+    page_status=None,
+    baseline_screenshot=None,
     ):
         self.issues = []
         self.highlight_boxes = []
@@ -857,11 +858,41 @@ class VisualAuditor:
                 boxes=self.highlight_boxes,
                 scale=device_scale or 1,
             )
+            # 7. Visual regression comparison
+            visual_regression = None
+
+            if baseline_screenshot is not None:
+                try:
+                    visual_regression = compare_screenshots(
+                        baseline_path=baseline_screenshot,
+                        current_path=original_path,
+                    )
+
+                    if visual_regression["visual_changes_detected"]:
+                        self.issues.append({
+                            "category": "visual_regression",
+                            "severity": "medium",
+                            "description": (
+                                "Visual differences detected: "
+                                f'{visual_regression["difference_percentage"]}% '
+                                "of pixels changed compared with the baseline."
+                            ),
+                            "baseline_screenshot": str(baseline_screenshot),
+                            "current_screenshot": str(original_path),
+                            "diff_image": visual_regression["diff_image_path"],
+                        })
+
+                except Exception as error:
+                    visual_regression = {
+                        "status": "failed",
+                        "error": str(error),
+                    }
 
             return {
                 "agent": "Visual Auditor",
                 "status": "completed",
                 "page_url": page.url,
+                "visual_regression": visual_regression,
                 "issues_found": len(self.issues),
                 "issues": self.issues,
                 "summary": {
