@@ -12,6 +12,7 @@ class TestStep(BaseModel):
     action: Literal["navigate", "click", "fill", "verify"]
     target: str
     expected: str
+    value: str | None = None
 
 
 class TestPlan(BaseModel):

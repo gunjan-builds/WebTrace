@@ -43,3 +43,6 @@ Thumbs.db
 # Generated WebTrace artifacts
 backend/screenshots/*
 backend/reports/*
+
+# Generated screenshots
+screenshots/

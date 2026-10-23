@@ -26,19 +26,19 @@ def health_check():
 
 
 @app.post("/api/tests", response_model=TestCreated)
-def create_test(request: TestRequest):
+async def create_test(request: TestRequest):
     try:
         validate_url(str(request.url))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     
-    result = create_test_run(request)
+    result = await create_test_run(request)
     runs[result["run_id"]] = result
 
     return TestCreated(
         run_id=result["run_id"],
         status=result["status"],
-        message="Test plan generated. Browser execution is not connected yet.",
+        message="Test plan generated and Browser execution finished.",
     )
 
 
