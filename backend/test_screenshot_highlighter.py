@@ -30,7 +30,8 @@ def main():
     image.save(original_path)
 
     result = highlight_screenshot(
-        screenshot_path=str(original_path),
+        input_path=str(original_path),
+        output_path=str(annotated_path),
         boxes=[
             {
                 "x": 100,
@@ -38,9 +39,9 @@ def main():
                 "width": 250,
                 "height": 150,
                 "label": "BROKEN IMAGE",
+                "severity": "medium",
             }
         ],
-        output_path=str(annotated_path),
     )
 
     assert Path(result).is_file()

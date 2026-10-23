@@ -134,24 +134,24 @@ async def main():
         print("-" * 60)
         print(json.dumps(results, indent=4))
 
+       
         # Collect the detected issues.
         issues = results.get("issues", [])
 
         issue_types = {
-            issue.get("type")
+            issue.get("category")
             for issue in issues
         }
 
-        # Determine whether specific issues were reported.
         missing_element_detected = any(
-            issue.get("type") == "missing_element"
-            and issue.get("selector") == "#missing-button"
+            issue.get("category") == "missing_element"
+            and issue.get("element") == "#missing-button"
             for issue in issues
         )
 
         hidden_element_detected = any(
-            issue.get("type") == "hidden_element"
-            and issue.get("selector") == ".hidden-message"
+            issue.get("category") == "hidden_element"
+            and issue.get("element") == ".hidden-message"
             for issue in issues
         )
 
@@ -160,38 +160,29 @@ async def main():
         )
 
         empty_button_detected = any(
-            issue.get("type") == "empty_button"
-            and issue.get("details", {}).get("id") == "empty-button"
+            issue.get("category") == "empty_button"
+            and issue.get("element") == "button#empty-button"
             for issue in issues
         )
 
         broken_image_detected = any(
-            issue.get("type") == "broken_image"
-            and (
-                issue.get("details", {}).get("id") == "broken-image"
-                or issue.get("details", {}).get("src", "").endswith(
-                    "missing-image.png"
-                )
-            )
+            issue.get("category") == "broken_image"
+            and issue.get("element") == "img#broken-image"
             for issue in issues
         )
 
         working_image_incorrectly_reported = any(
-            issue.get("type") == "broken_image"
-            and (
-                issue.get("details", {}).get("id") == "working-image"
-                or issue.get("details", {}).get("src", "").startswith(
-                    "data:image/svg+xml"
-                )
-            )
+            issue.get("category") == "broken_image"
+            and issue.get("element") == "img#working-image"
             for issue in issues
         )
 
         accessible_button_incorrectly_reported = any(
-            issue.get("type") == "empty_button"
-            and issue.get("details", {}).get("id") == "icon-button"
+            issue.get("category") == "empty_button"
+            and issue.get("element") == "button#icon-button"
             for issue in issues
         )
+
 
         # Define expected outcomes.
         tests = [
