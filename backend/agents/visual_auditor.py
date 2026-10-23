@@ -12,14 +12,11 @@ from backend.agents.screenshot_highlighter import highlight_screenshot
 JS_HELPERS = r"""
 const cssPath = (el) => {
     if (!(el instanceof Element)) return '';
+    if (el.id) return el.tagName.toLowerCase() + '#' + el.id;
     const parts = [];
     let node = el;
-    while (node && node.nodeType === 1 && node !== document.documentElement) {
+    while (node && node.nodeType === 1 && node !== document.documentElement && parts.length < 4) {
         let part = node.tagName.toLowerCase();
-        if (node.id) {
-            parts.unshift(part + '#' + node.id);
-            break;
-        }
         const parent = node.parentElement;
         if (parent) {
             const same = Array.from(parent.children).filter(c => c.tagName === node.tagName);
@@ -142,69 +139,18 @@ CLS_SCRIPT = r"""
 """
 
 
-BLOCK_PAGE_SCRIPT = r"""
-() => {
-    const text = ((document.title || '') + ' ' +
-        (document.body ? document.body.innerText : '')).slice(0, 2500);
-    const pattern = /access denied|captcha|verify you are human|are you a robot|unusual traffic|attention required|request blocked|enable javascript and cookies/i;
-    return { blocked: pattern.test(text) && text.length < 1500, length: text.length };
-}
-"""
-
-
 class VisualAuditor:
     """
     Detects UI problems on a live Playwright page.
 
-    Findings are split into two types:
-      - "bug":     real problems (JS errors, HTTP errors, broken images,
-                   missing/hidden expected elements, empty buttons, overflow,
-                   disappearing elements, broken links). Drawn as numbered
-                   callouts on the annotated screenshot.
-      - "warning": accessibility / review items (missing alt, unlabeled
-                   fields, empty links, possible overlaps, dynamic changes).
-                   Grouped by category; a few are drawn as small badges.
+    Checks: HTTP errors, JavaScript errors, missing/hidden expected elements,
+    broken images, images without alt, empty buttons, empty links, unlabeled
+    form fields/checkboxes, horizontal overflow, element overlap, layout shift
+    (CLS + element movement), dynamic content changes, disappearing elements
+    (including after a reload), and optionally broken links.
     """
 
-    MAX_WARNING_BOXES = 12
-    MAX_WARNING_BOXES_PER_CATEGORY = 4
-
-    WARNING_CATEGORIES = {
-        "image_missing_alt",
-        "form_field_without_label",
-        "checkbox_without_label",
-        "empty_link",
-        "possible_layout_overlap",
-        "dynamic_content_changed",
-        "element_appeared_after_reload",
-        "layout_shift",
-        "cumulative_layout_shift",
-        "selector_check_error",
-        "audit_may_be_blocked",
-    }
-
-    STEPS = {
-        "javascript_error": "Open the page and check the browser console; the error is logged on load.",
-        "page_http_error": "Open the page URL; the server responds with an error status.",
-        "broken_image": "Open the page and scroll to the image; it shows as broken.",
-        "broken_link": "Click the link on the page; the target returns an error.",
-        "missing_element": "Open the page and look for the expected element; it is not present.",
-        "hidden_element": "Open the page; the expected element exists but is not visible.",
-        "horizontal_overflow": "Open the page and scroll sideways; content extends past the screen.",
-        "empty_button": "Inspect the button; it has no text or accessible name.",
-        "element_disappeared": "Open the page and wait a second; the element vanishes.",
-        "element_disappeared_after_reload": "Open the page, then reload it; the element is gone.",
-        "image_missing_alt": "Inspect the image element; it has no alt attribute.",
-        "form_field_without_label": "Inspect the input field; it has no label or accessible name.",
-        "checkbox_without_label": "Inspect the checkbox; it has no label.",
-        "empty_link": "Inspect the link; it has no text or accessible name.",
-        "possible_layout_overlap": "Open the page and check whether the elements cover each other.",
-        "dynamic_content_changed": "Open the page and wait; content changes without interaction.",
-        "element_appeared_after_reload": "Reload the page; a new element appears.",
-        "layout_shift": "Open the page and watch; elements move without interaction.",
-        "cumulative_layout_shift": "Open the page and watch; content jumps while loading.",
-        "audit_may_be_blocked": "Open the page in a normal browser; it may show a CAPTCHA or block page to automated tools.",
-    }
+    MAX_BANNERS = 6
 
     def __init__(
         self,
@@ -227,8 +173,6 @@ class VisualAuditor:
         self.highlight_boxes = []
         self._issue_counter = 0
         self._seen = {}
-        self._warning_boxes_total = 0
-        self._warning_boxes_by_category = Counter()
 
     # ------------------------------------------------------------------
     # Helpers
@@ -252,7 +196,6 @@ class VisualAuditor:
 
         issue = {
             "id": self._issue_counter,
-            "type": "warning" if category in self.WARNING_CATEGORIES else "bug",
             "category": category,
             "description": description,
             "severity": severity,
@@ -265,23 +208,10 @@ class VisualAuditor:
         self._seen[key] = issue
         return issue
 
-    def _highlight(self, issue, rect, label, detail=None):
-        """Mark an element on the annotated screenshot."""
+    def _highlight(self, issue, rect, label):
+        """Draw a box around an element on the annotated screenshot."""
         if not rect or rect.get("width", 0) <= 0 or rect.get("height", 0) <= 0:
             return
-
-        if issue["type"] == "warning":
-            category = issue["category"]
-
-            if (
-                self._warning_boxes_total >= self.MAX_WARNING_BOXES
-                or self._warning_boxes_by_category[category]
-                >= self.MAX_WARNING_BOXES_PER_CATEGORY
-            ):
-                return
-
-            self._warning_boxes_total += 1
-            self._warning_boxes_by_category[category] += 1
 
         self.highlight_boxes.append({
             "x": rect["x"],
@@ -289,24 +219,18 @@ class VisualAuditor:
             "width": rect["width"],
             "height": rect["height"],
             "label": label,
-            "detail": detail or str(issue.get("element") or ""),
             "category": issue["category"],
             "severity": issue["severity"],
-            "type": issue["type"],
             "id": issue["id"],
         })
 
     def _banner(self, issue, label):
-        """Show a page-level bug as a ribbon above the screenshot."""
-        if issue["type"] == "warning":
-            return
-
+        """Show a page-level issue as a banner above the screenshot."""
         self.highlight_boxes.append({
             "banner": True,
             "label": label,
             "category": issue["category"],
             "severity": issue["severity"],
-            "type": issue["type"],
             "id": issue["id"],
         })
 
@@ -319,20 +243,6 @@ class VisualAuditor:
     # ------------------------------------------------------------------
     # Checks
     # ------------------------------------------------------------------
-    async def _check_blocked_page(self, page):
-        result = await self._safe_evaluate(page, BLOCK_PAGE_SCRIPT, {})
-
-        if result and result.get("blocked"):
-            self._add_issue(
-                "audit_may_be_blocked",
-                "The page looks like a CAPTCHA or access-denied page, so the "
-                "audit may not reflect the real website.",
-                severity="medium",
-                element="page",
-                evidence=result,
-                confidence="medium",
-            )
-
     async def _check_missing_elements(self, page, expected_selectors):
         for selector in expected_selectors or []:
             try:
@@ -366,7 +276,7 @@ class VisualAuditor:
                         evidence={"selector": selector},
                     )
                     box = await locator.first.bounding_box()
-                    if box and box["width"] > 0 and box["height"] > 0:
+                    if box:
                         scroll = await self._safe_evaluate(
                             page,
                             "() => ({x: window.scrollX, y: window.scrollY})",
@@ -380,8 +290,7 @@ class VisualAuditor:
                                 "width": box["width"],
                                 "height": box["height"],
                             },
-                            "Hidden element",
-                            detail=selector,
+                            f"Hidden: {selector}",
                         )
                     else:
                         self._banner(issue, f"Hidden element: {selector}")
@@ -431,14 +340,10 @@ class VisualAuditor:
                         "selector": image["path"],
                     },
                 )
-                self._highlight(
-                    issue, rect, "Broken image",
-                    detail="inline image" if src.startswith("data:")
-                    else src.split("?")[0].rstrip("/").split("/")[-1] or src,
-                )
+                self._highlight(issue, rect, f"Broken image #{issue['id']}")
                 continue
 
-            # Working image with no alt attribute at all (warning).
+            # Working image with no alt attribute at all.
             if src and image["visible"] and image["alt"] is None:
                 issue = self._add_issue(
                     "image_missing_alt",
@@ -448,7 +353,7 @@ class VisualAuditor:
                     evidence={"src": src, "selector": image["path"]},
                     confidence="medium",
                 )
-                self._highlight(issue, image["rect"], "Image missing alt")
+                self._highlight(issue, image["rect"], f"No alt #{issue['id']}")
 
     async def _check_empty_buttons(self, page):
         buttons = await self._safe_evaluate(
@@ -476,7 +381,9 @@ class VisualAuditor:
                     element=button["path"],
                     evidence={"html": button["html"], "selector": button["path"]},
                 )
-                self._highlight(issue, button["rect"], "Empty button")
+                self._highlight(
+                    issue, button["rect"], f"Unnamed button #{issue['id']}"
+                )
 
     async def _check_empty_links(self, page):
         links = await self._safe_evaluate(
@@ -503,16 +410,14 @@ class VisualAuditor:
                     evidence={"href": link["href"], "selector": link["path"]},
                     confidence="medium",
                 )
-                self._highlight(issue, link["rect"], "Empty link")
+                self._highlight(issue, link["rect"], f"Empty link #{issue['id']}")
 
     async def _check_horizontal_overflow(self, page):
         result = await self._safe_evaluate(
             page,
             _js(r"""
             const viewportWidth = document.documentElement.clientWidth;
-            const viewportHeight = window.innerHeight;
             const documentWidth = document.documentElement.scrollWidth;
-            const documentHeight = document.documentElement.scrollHeight;
             const offenders = [];
 
             if (documentWidth > viewportWidth + 5) {
@@ -522,12 +427,15 @@ class VisualAuditor:
                     if (!isVisible(el)) continue;
                     const r = el.getBoundingClientRect();
                     if (r.right > viewportWidth + 5) {
-                        offenders.push(cssPath(el));
+                        offenders.push({
+                            selector: cssPath(el),
+                            rect: rectOf(el)
+                        });
                     }
                 }
             }
 
-            return { viewportWidth, viewportHeight, documentWidth, documentHeight, offenders };
+            return { viewportWidth, documentWidth, offenders };
             """),
             {},
         )
@@ -535,38 +443,30 @@ class VisualAuditor:
         if not result:
             return
 
-        viewport_width = result.get("viewportWidth", 0)
-        document_width = result.get("documentWidth", 0)
-
-        if document_width > viewport_width + 5:
+        if result.get("documentWidth", 0) > result.get("viewportWidth", 0) + 5:
             offenders = result.get("offenders", [])
 
             issue = self._add_issue(
                 "horizontal_overflow",
                 "Page content extends beyond the viewport horizontally.",
                 severity="medium",
-                element=offenders[0] if offenders else "page",
+                element=offenders[0]["selector"] if offenders else None,
                 evidence={
-                    "viewportWidth": viewport_width,
-                    "documentWidth": document_width,
-                    "offenders": offenders,
+                    "viewportWidth": result["viewportWidth"],
+                    "documentWidth": result["documentWidth"],
+                    "offenders": [o["selector"] for o in offenders],
                 },
                 confidence="medium",
             )
 
-            # Mark the part of the page that sticks out past the screen edge.
-            self._highlight(
+            self._banner(
                 issue,
-                {
-                    "x": viewport_width,
-                    "y": 0,
-                    "width": document_width - viewport_width,
-                    "height": result.get("documentHeight", 0)
-                    or result.get("viewportHeight", 0),
-                },
-                "Horizontal overflow",
-                detail=f"page {document_width}px > screen {viewport_width}px",
+                f"Horizontal overflow: page {result['documentWidth']}px "
+                f"> viewport {result['viewportWidth']}px",
             )
+
+            for offender in offenders:
+                self._highlight(issue, offender["rect"], f"Overflow #{issue['id']}")
 
     async def _check_layout_overlap(self, page):
         overlaps = await self._safe_evaluate(
@@ -576,8 +476,7 @@ class VisualAuditor:
                 'h1, h2, h3, button, input:not([type="hidden"]), img, p, a'
             )).filter(el => {
                 const r = el.getBoundingClientRect();
-                return r.width > 5 && r.height > 5 && isVisible(el) &&
-                    !el.closest('[role="dialog"], [aria-modal="true"]');
+                return r.width > 5 && r.height > 5 && isVisible(el);
             }).slice(0, 400);
 
             const results = [];
@@ -626,7 +525,7 @@ class VisualAuditor:
                 },
                 confidence="low",
             )
-            self._highlight(issue, overlap["rect"], "Possible overlap")
+            self._highlight(issue, overlap["rect"], f"Overlap #{issue['id']}")
 
     async def _check_form_fields(self, page):
         fields = await self._safe_evaluate(
@@ -659,7 +558,7 @@ class VisualAuditor:
                     evidence=field,
                     confidence="medium",
                 )
-                self._highlight(issue, rect, "Field without label")
+                self._highlight(issue, rect, f"No label #{issue['id']}")
 
     async def _check_checkboxes(self, page):
         checkboxes = await self._safe_evaluate(
@@ -689,7 +588,7 @@ class VisualAuditor:
                     evidence=checkbox,
                     confidence="medium",
                 )
-                self._highlight(issue, rect, "Checkbox without label")
+                self._highlight(issue, rect, f"Checkbox no label #{issue['id']}")
 
     async def _check_links(self, page):
         links = await self._safe_evaluate(
@@ -730,8 +629,7 @@ class VisualAuditor:
                         self._highlight(
                             issue,
                             link["rect"],
-                            "Broken link",
-                            detail=f"HTTP {response.status} {link['href']}",
+                            f"Broken link {response.status} #{issue['id']}",
                         )
             except Exception:
                 continue
@@ -743,8 +641,8 @@ class VisualAuditor:
         """
         Compares observations of the page over time:
         text/image changes, elements that disappear, elements that move
-        and cumulative layout shift. Optionally reloads the page to catch
-        elements that appear/disappear between loads.
+        (layout shift) and cumulative layout shift. Optionally reloads the
+        page to catch elements that appear/disappear between loads.
         """
         before = await self._safe_evaluate(page, SNAPSHOT_SCRIPT, None)
         if not before:
@@ -763,7 +661,7 @@ class VisualAuditor:
         images_changed = before["images"] != after["images"]
 
         if text_changed or images_changed:
-            self._add_issue(
+            issue = self._add_issue(
                 "dynamic_content_changed",
                 "Page text or image sources changed between observations. "
                 "This may be expected behavior.",
@@ -774,13 +672,14 @@ class VisualAuditor:
                 },
                 confidence="medium",
             )
+            self._banner(issue, "Dynamic content changed during observation (info)")
 
         # --- Disappeared / moved elements ------------------------------
         before_items = {i["key"]: i for i in before["items"]}
         after_items = {i["key"]: i for i in after["items"]}
 
         disappeared = [
-            item
+            before_items[key]
             for key, item in before_items.items()
             if item["visible"]
             and (key not in after_items or not after_items[key]["visible"])
@@ -795,9 +694,7 @@ class VisualAuditor:
                 evidence={"key": item["key"], "text": item["text"]},
                 confidence="medium",
             )
-            self._highlight(
-                issue, item["rect"], "Element disappeared", detail=item["key"]
-            )
+            self._highlight(issue, item["rect"], f"Disappeared #{issue['id']}")
 
         moved = []
         for key, old in before_items.items():
@@ -822,10 +719,10 @@ class VisualAuditor:
                 evidence={"before": old["rect"], "after": new["rect"]},
                 confidence="medium",
             )
-            self._highlight(issue, old["rect"], "Layout shift", detail=old["key"])
+            self._highlight(issue, old["rect"], f"Shifted #{issue['id']}")
 
         if cls_value is not None and cls_value > 0.1:
-            self._add_issue(
+            issue = self._add_issue(
                 "cumulative_layout_shift",
                 f"Cumulative Layout Shift is {cls_value:.3f} "
                 "(above the 0.1 'good' threshold).",
@@ -833,13 +730,10 @@ class VisualAuditor:
                 evidence={"cls": round(cls_value, 4)},
                 confidence="medium",
             )
+            self._banner(issue, f"Layout shift score (CLS): {cls_value:.3f}")
 
         # --- Reload comparison -----------------------------------------
-        # Avoid false positives for pages created using page.set_content().
-        if (
-            self.reload_check
-            and page.url not in ("about:blank", "about:srcdoc")
-        ):
+        if self.reload_check:
             await self._check_reload_stability(page, after_items)
 
     async def _check_reload_stability(self, page, baseline_items):
@@ -868,9 +762,7 @@ class VisualAuditor:
                 evidence={"key": key, "text": item["text"]},
                 confidence="medium",
             )
-            self._highlight(
-                issue, item["rect"], "Gone after reload", detail=key
-            )
+            self._highlight(issue, item["rect"], f"Gone after reload #{issue['id']}")
 
         for key in sorted(reloaded_visible - baseline_visible)[:5]:
             item = reloaded_items[key]
@@ -884,157 +776,9 @@ class VisualAuditor:
             )
 
     # ------------------------------------------------------------------
-    # Final report shaping
-    # ------------------------------------------------------------------
-    @staticmethod
-    def _short_detail(issue):
-        """A short, human-readable detail for the legend and the report."""
-        evidence = issue.get("evidence") or {}
-        category = issue["category"]
-
-        if category in ("broken_image", "image_missing_alt"):
-            src = str(evidence.get("src") or "")
-            if src.startswith("data:"):
-                return "inline image"
-            return src.split("?")[0].rstrip("/").split("/")[-1] or "image"
-
-        if category == "page_http_error":
-            return f"HTTP {evidence.get('status', '')}".strip()
-
-        if category == "javascript_error":
-            return str(evidence.get("message") or "")
-
-        if category == "horizontal_overflow":
-            return (
-                f"page {evidence.get('documentWidth', '?')}px > "
-                f"screen {evidence.get('viewportWidth', '?')}px"
-            )
-
-        if category in ("missing_element", "hidden_element"):
-            return str(evidence.get("selector") or issue.get("element") or "")
-
-        return str(issue.get("element") or "")
-
-    def _finalize_issues(self, original_path, annotated_path):
-        """
-        - Keeps every bug as its own issue.
-        - Groups warnings by category (one entry with a count).
-        - Adds detail, steps_to_reproduce and screenshot evidence to each issue.
-        - Renumbers ids so screenshot numbers match the report.
-        Returns the legend list used by the screenshot highlighter.
-        """
-        bugs = [i for i in self.issues if i["type"] == "bug"]
-
-        grouped = {}
-        for issue in self.issues:
-            if issue["type"] == "warning":
-                grouped.setdefault(issue["category"], []).append(issue)
-
-        final = []
-        id_map = {}
-        details = {}
-
-        for issue in bugs:
-            new_id = len(final) + 1
-            id_map[issue["id"]] = new_id
-            details[new_id] = self._short_detail(issue)
-            issue["id"] = new_id
-            final.append(issue)
-
-        for category, items in grouped.items():
-            first = items[0]
-            new_id = len(final) + 1
-            description = first["description"]
-
-            if len(items) > 1:
-                description = (
-                    f"{len(items)} occurrences of "
-                    f"{category.replace('_', ' ')}. "
-                    f"Example: {first['description']}"
-                )
-
-            for item in items:
-                id_map[item["id"]] = new_id
-
-            details[new_id] = self._short_detail(first)
-
-            final.append({
-                "id": new_id,
-                "type": "warning",
-                "category": category,
-                "description": description,
-                "severity": first["severity"],
-                "element": first["element"],
-                "evidence": {
-                    "count": len(items),
-                    "examples": [str(i["element"]) for i in items[:5]],
-                },
-                "confidence": first["confidence"],
-            })
-
-        legend = []
-
-        for issue in final:
-            issue["detail"] = details.get(issue["id"], "")
-            issue["steps_to_reproduce"] = self.STEPS.get(
-                issue["category"],
-                "Open the page and review the highlighted area.",
-            )
-            issue["screenshot"] = original_path
-            issue["annotated_screenshot"] = annotated_path
-
-            count = 1
-            if issue["type"] == "warning":
-                count = (issue.get("evidence") or {}).get("count", 1)
-
-            legend.append({
-                "id": issue["id"],
-                "type": issue["type"],
-                "category": issue["category"],
-                "severity": issue["severity"],
-                "count": count,
-                "detail": issue["detail"],
-            })
-
-        for box in self.highlight_boxes:
-            box["id"] = id_map.get(box.get("id"), box.get("id"))
-
-        self.issues = final
-        return legend
-
-    # ------------------------------------------------------------------
     # Main entry point
     # ------------------------------------------------------------------
     async def audit_page(
-        self,
-        page,
-        expected_selectors=None,
-        js_errors=None,
-        check_links=False,
-        page_status=None,
-    ):
-        """Never raises: always returns a valid result dictionary."""
-        try:
-            return await self._audit_page_impl(
-                page, expected_selectors, js_errors, check_links, page_status
-            )
-        except Exception as error:
-            return {
-                "agent": "Visual Auditor",
-                "status": "error",
-                "error": str(error),
-                "page_url": getattr(page, "url", ""),
-                "issues_found": 0,
-                "bugs_found": 0,
-                "warnings_found": 0,
-                "issues": [],
-                "summary": {"by_severity": {}, "by_category": {}},
-                "javascript_errors": [],
-                "screenshot": None,
-                "annotated_screenshot": None,
-            }
-
-    async def _audit_page_impl(
         self,
         page,
         expected_selectors=None,
@@ -1047,8 +791,6 @@ class VisualAuditor:
         self.js_errors = list(js_errors or [])
         self._issue_counter = 0
         self._seen = {}
-        self._warning_boxes_total = 0
-        self._warning_boxes_by_category = Counter()
 
         def on_page_error(error):
             message = str(error)
@@ -1058,25 +800,17 @@ class VisualAuditor:
         page.on("pageerror", on_page_error)
 
         try:
-            # 0. Let the page settle (heavy sites keep loading after "load").
-            try:
-                await page.wait_for_load_state("networkidle", timeout=5000)
-            except Exception:
-                pass
-
             # 1. Page-level HTTP error
             if page_status is not None and page_status >= 400:
                 issue = self._add_issue(
                     "page_http_error",
                     f"Page returned HTTP status {page_status}.",
                     severity="high",
-                    element="page",
                     evidence={"status": page_status, "url": page.url},
                 )
                 self._banner(issue, f"HTTP ERROR: {page_status}")
 
             # 2. Static checks (positions match the screenshot taken below)
-            await self._check_blocked_page(page)
             await self._check_missing_elements(page, expected_selectors)
             await self._check_broken_images(page)
             await self._check_empty_buttons(page)
@@ -1103,9 +837,8 @@ class VisualAuditor:
                 page, "() => window.devicePixelRatio || 1", 1
             )
 
-            # 4. Dynamic behavior checks
+          # 4. Dynamic behavior checks
             await self._check_dynamic_behavior(page)
-
             # 5. JavaScript errors (includes errors raised during reload)
             for error in self.js_errors:
                 issue = self._add_issue(
@@ -1117,19 +850,12 @@ class VisualAuditor:
                 )
                 self._banner(issue, f"JS ERROR: {error[:100]}")
 
-            # 6. Group warnings, add evidence + steps, renumber ids
-            legend = self._finalize_issues(
-                original_path.as_posix(), annotated_path.as_posix()
-            )
-
-            # 7. Annotated screenshot (numbered callouts + legend)
+            # 6. Annotated screenshot
             highlight_screenshot(
                 input_path=str(original_path),
                 output_path=str(annotated_path),
                 boxes=self.highlight_boxes,
                 scale=device_scale or 1,
-                legend=legend,
-                subtitle=page.url,
             )
 
             return {
@@ -1137,10 +863,6 @@ class VisualAuditor:
                 "status": "completed",
                 "page_url": page.url,
                 "issues_found": len(self.issues),
-                "bugs_found": sum(1 for i in self.issues if i["type"] == "bug"),
-                "warnings_found": sum(
-                    1 for i in self.issues if i["type"] == "warning"
-                ),
                 "issues": self.issues,
                 "summary": {
                     "by_severity": dict(
@@ -1151,8 +873,8 @@ class VisualAuditor:
                     ),
                 },
                 "javascript_errors": self.js_errors,
-                "screenshot": original_path.as_posix(),
-                "annotated_screenshot": annotated_path.as_posix(),
+                "screenshot": str(original_path),
+                "annotated_screenshot": str(annotated_path),
             }
 
         finally:
