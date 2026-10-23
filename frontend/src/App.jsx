@@ -2,18 +2,16 @@ import React, { useState } from 'react';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
 
-function App() {
+export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   return (
-    <div>
-      {isAuthenticated ? (
-        <Dashboard />
-      ) : (
+    <div className="w-full h-screen bg-[#090e1a] text-slate-100 font-sans overflow-hidden">
+      {!isAuthenticated ? (
         <Login onLogin={() => setIsAuthenticated(true)} />
+      ) : (
+        <Dashboard />
       )}
     </div>
   );
 }
-
-export default App;
