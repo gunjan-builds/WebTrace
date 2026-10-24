@@ -47,12 +47,17 @@ class BrowserTester:
                 return expected in self.page.url
 
             if assertion == "text_visible":
-                page_text = await self.page.locator("body").inner_text()
-                print("PAGE TEXT:", repr(page_text))
-                print("EXPECTED TEXT:", repr(expected))
-                return expected.lower() in page_text.lower()
+                try:
+                    await self.page.get_by_text(
+                        expected, exact=False
+                    ).first.wait_for(
+                        state="visible",
+                        timeout=10000
+                    )
+                    return True
+                except Exception:
+                    return False
 
-            return False
 
         except Exception as exc:
             print(f"Verification failed: {exc}")
