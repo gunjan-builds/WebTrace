@@ -1,9 +1,13 @@
+<<<<<<< HEAD
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from PIL import Image, ImageDraw
+=======
+from fastapi.middleware.cors import CORSMiddleware
+>>>>>>> origin/orchestrator-ai
 
 from backend.browser.runner import BrowserRunner
 
@@ -22,9 +26,21 @@ SCREENSHOT_DIR = "screenshots"
 os.makedirs(SCREENSHOT_DIR, exist_ok=True)
 app.mount("/screenshots", StaticFiles(directory=SCREENSHOT_DIR), name="screenshots")
 
+<<<<<<< HEAD
 class TestRequest(BaseModel):
     url: str
     objective: str = None
+=======
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+# Temporary in-memory storage for test runs
+runs = {}
+>>>>>>> origin/orchestrator-ai
 
 @app.post("/run-test")
 async def run_test(request: TestRequest):
@@ -68,5 +84,59 @@ async def run_test(request: TestRequest):
     }
 
 @app.get("/")
+<<<<<<< HEAD
 async def root():
     return {"message": "AI QA Backend Active"}
+=======
+def home():
+    return {"message": "Welcome to WebTrace"}
+
+
+@app.get("/health")
+def health_check():
+    return {
+        "status": "healthy",
+        "service": "WebTrace backend",
+    }
+
+
+@app.post("/api/tests", response_model=TestCreated)
+async def create_test(request: TestRequest):
+    try:
+        validate_url(str(request.url))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    
+    result = await create_test_run(request)
+    runs[result["run_id"]] = result
+
+    return TestCreated(
+        run_id=result["run_id"],
+        status=result["status"],
+        message="Test plan generated and Browser execution finished.",
+    )
+
+
+@app.get("/api/tests/{run_id}")
+def get_test(run_id: str):
+    result = runs.get(run_id)
+
+    if result is None:
+        raise HTTPException(status_code=404, detail="Test run not found")
+
+    return {
+        "run_id": result["run_id"],
+        "status": result["status"],
+        "plan": result["plan"],
+    }
+
+
+@app.get("/api/tests/{run_id}/report")
+def get_test_report(run_id: str):
+    result = runs.get(run_id)
+
+    if result is None:
+        raise HTTPException(status_code=404, detail="Test run not found")
+
+    return result["report"]
+>>>>>>> origin/orchestrator-ai

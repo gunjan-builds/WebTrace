@@ -12,6 +12,7 @@ class TestStep(BaseModel):
     action: Literal["navigate", "click", "fill", "verify"]
     target: str
     expected: str
+    value: str | None = None
 
 
 class TestPlan(BaseModel):
@@ -20,7 +21,7 @@ class TestPlan(BaseModel):
 
 class TestCreated(BaseModel):
     run_id: str
-    status: Literal["queued", "running", "completed", "error"]
+    status: Literal["queued", "running", "completed", "failed", "error"]
     message: str
 
 
@@ -28,11 +29,12 @@ class StepResult(BaseModel):
     name: str
     status: Literal["passed", "failed", "inconclusive"]
     message: str
+    screenshot_path: str | None = None
 
 
 class TestReport(BaseModel):
     run_id: str
-    status: Literal["queued", "running", "completed", "error"]
+    status: Literal["queued", "running", "completed", "failed", "error"]
     objective: str
     steps: list[StepResult] = Field(default_factory=list)
     issues: list[str] = Field(default_factory=list)

@@ -8,12 +8,14 @@ __pycache__/
 # Virtual environments
 .venv/
 venv/
+env/
 
 # Environment variables and API keys
 .env
 .env.*
 !.env.example
 
+<<<<<<< HEAD
 # Keep an example environment file if needed
 !.env.example
 =======
@@ -45,16 +47,26 @@ __pycache__/
 # Keep an example environment file if needed
 !.env.example
 
+=======
+>>>>>>> origin/orchestrator-ai
 # Test and coverage files
 .pytest_cache/
 .coverage
 htmlcov/
 
-# IDE and operating system files
-.vscode/
-.DS_Store
-Thumbs.db
+# Frontend dependencies and build output
+node_modules/
+dist/
 
-# Generated WebTrace artifacts
+# Generated test artifacts
+screenshots/
 backend/screenshots/*
 backend/reports/*
+test-results/
+playwright-report/
+
+# IDE and operating system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
