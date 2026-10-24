@@ -11,7 +11,7 @@ from .url_validator import validate_url
 async def create_test_run(request: TestRequest) -> dict:
     run_id = str(uuid4())
 
-    # Generate the plan without blocking the async event loop.
+    # Generate the test plan without blocking the async event loop.
     try:
         plan = await asyncio.to_thread(generate_test_plan, request)
         print("Gemini successfully generated the test plan.")
@@ -19,38 +19,37 @@ async def create_test_run(request: TestRequest) -> dict:
     except Exception as exc:
         print(f"Gemini unavailable: {exc}")
         print("Using a temporary test plan for browser testing.")
-        
 
         if "the-internet.herokuapp.com/login" in str(request.url):
             plan = TestPlan(
-              steps=[
+                steps=[
                     TestStep(
                         action="navigate",
                         target=str(request.url),
-                        expected="Login page opens"
+                        expected="Login page opens",
                     ),
                     TestStep(
                         action="fill",
                         target="#username",
                         value="tomsmith",
-                        expected="Username entered"
+                        expected="Username entered",
                     ),
                     TestStep(
                         action="fill",
                         target="#password",
                         value="SuperSecretPassword!",
-                        expected="Password entered"
+                        expected="Password entered",
                     ),
                     TestStep(
                         action="click",
                         target="button[type='submit']",
-                        expected="Login button clicked"
+                        expected="Login button clicked",
                     ),
                     TestStep(
                         action="verify",
                         target="text",
-                        expected="You logged into a secure area!"
-                    )
+                        expected="You logged into a secure area!",
+                    ),
                 ]
             )
         else:
@@ -59,13 +58,13 @@ async def create_test_run(request: TestRequest) -> dict:
                     TestStep(
                         action="navigate",
                         target=str(request.url),
-                        expected="Website opens successfully"
+                        expected="Website opens successfully",
                     ),
                     TestStep(
                         action="verify",
                         target="text",
-                        expected="Learn more"
-                    )
+                        expected="Learn more",
+                    ),
                 ]
             )
 
@@ -84,7 +83,8 @@ async def create_test_run(request: TestRequest) -> dict:
 
         for index, step in enumerate(plan.steps, start=1):
             step_name = f"Step {index}: {step.action}"
-            screenshot_path = ""
+            screenshot_path = None
+            passed = False
 
             try:
                 if step.action == "navigate":
@@ -107,7 +107,7 @@ async def create_test_run(request: TestRequest) -> dict:
                     message = (
                         "Click action completed"
                         if passed
-                        else "Click action failed"
+                        else f"Click action failed: {step.target}"
                     )
 
                 elif step.action == "fill":
@@ -121,7 +121,7 @@ async def create_test_run(request: TestRequest) -> dict:
                         message = (
                             "Input field filled"
                             if passed
-                            else "Fill action failed"
+                            else f"Fill action failed: {step.target}"
                         )
 
                 elif step.action == "verify":
@@ -137,45 +137,59 @@ async def create_test_run(request: TestRequest) -> dict:
                     message = (
                         f"Expected result found: {step.expected}"
                         if passed
-                        else f"Expected result not verified: {step.expected}"
+                        else (
+                            "Expected result not verified: "
+                            f"{step.expected}"
+                        )
                     )
 
                 else:
                     passed = False
                     message = f"Unsupported action: {step.action}"
 
-                
-                try:
-                    screenshot_path = await tester.runner.capture_screenshot(
-                        f"{run_id}_step_{index}"
-                    )   
-                except Exception as screenshot_exc:
-                    print(f"Screenshot failed for {step_name}: {screenshot_exc}")
-
-                report.steps.append(
-                    StepResult(
-                        name=step_name,
-                        status="passed" if passed else "failed",
-                        message=message,
-                    )
-                )
-
-
             except Exception as exc:
-                report.steps.append(
-                    StepResult(
-                        name=step_name,
-                        status="failed",
-                        message=f"Step execution error: {str(exc)}",
-                    )
-                )
-                report.issues.append(f"{step_name} failed")
+                passed = False
+                message = f"Step execution error: {str(exc)}"
 
-        report.status = "completed"
+            # Capture a screenshot after every step, including failures.
+            try:
+                screenshot_path = await tester.capture_screenshot(
+                    f"{run_id}_step_{index}"
+                )
+            except Exception as screenshot_exc:
+                print(
+                    f"Screenshot failed for {step_name}: "
+                    f"{screenshot_exc}"
+                )
+
+            step_status = "passed" if passed else "failed"
+
+            report.steps.append(
+                StepResult(
+                    name=step_name,
+                    status=step_status,
+                    message=message,
+                    screenshot_path=screenshot_path,
+                )
+            )
+
+            if not passed:
+                report.issues.append(
+                    f"{step_name} failed: {message}"
+                )
+
+        # A completed run is only passed if every step passed.
+        report.status = (
+            "failed"
+            if any(step.status == "failed" for step in report.steps)
+            else "completed"
+        )
 
     except Exception as exc:
         report.status = "error"
-        report.issues.append(f"Test execution error: {str(exc)}")
+        report.issues.append(
+            f"Test execution error: {str(exc)}"
+        )
 
     finally:
         if browser_started:

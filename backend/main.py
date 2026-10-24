@@ -1,3 +1,4 @@
+from fastapi.middleware.cors import CORSMiddleware
 
 from fastapi import FastAPI, HTTPException
 
@@ -8,6 +9,13 @@ from .url_validator import validate_url
 
 app = FastAPI(title="WebTrace API")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 # Temporary in-memory storage for test runs
 runs = {}
 
