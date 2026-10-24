@@ -7,27 +7,11 @@ __pycache__/
 # Virtual environments
 .venv/
 venv/
+env/
 
 # Environment variables and API keys
 .env
 .env.*
-!.env.example
-
-# Keep an example environment file if needed
-!.env.example
-# Python virtual environments
-.venv/
-venv/
-
-# Python cache files
-__pycache__/
-*.py[cod]
-
-# Environment variables and secrets
-.env
-.env.*
-
-# Keep an example environment file if needed
 !.env.example
 
 # Test and coverage files
@@ -35,14 +19,19 @@ __pycache__/
 .coverage
 htmlcov/
 
-# IDE and operating system files
-.vscode/
-.DS_Store
-Thumbs.db
+# Frontend dependencies and build output
+node_modules/
+dist/
 
-# Generated WebTrace artifacts
+# Generated test artifacts
+screenshots/
 backend/screenshots/*
 backend/reports/*
+test-results/
+playwright-report/
 
-# Generated screenshots
-screenshots/
+# IDE and operating system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
