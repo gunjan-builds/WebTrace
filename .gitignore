@@ -1,5 +1,6 @@
 
 # Python cache files
+<<<<<<< HEAD
 __pycache__/
 *.py[cod]
 *.pyd
@@ -15,6 +16,20 @@ venv/
 
 # Keep an example environment file if needed
 !.env.example
+=======
+
+**pycache**/
+*.py[cod]
+
+# Generated Visual Auditor reports
+
+backend/reports/*.json
+
+# Generated screenshots
+
+backend/screenshots/*.png
+
+>>>>>>> origin/feature/visual-auditor-v2
 # Python virtual environments
 .venv/
 venv/
